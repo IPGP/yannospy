@@ -1,0 +1,44 @@
+#input earth model:
+MODELS/PREMQL6
+#output information file:
+PREMQL6.asc.mhz25.S
+#prefix for output eigenfunction files:
+PREMQL6.bin.mhz25.S
+#type code (3=spheroidal, 2=toroidal)
+3
+#precision (2) and switch off gravity pertubation frequency:
+1.e-11 1.e-11 0.315
+#lmin, lmax, fmin, fmax, nmax:
+0 400 0.2 25 100
+#### If you need to output only some radius layers of eigenf
+#number of layer for output:
+1
+#radius layers
+0. 6371000.
+#### Computations flags. If you don't know what you are doing, don't touch.
+# force fmin (usually F):
+F
+# Cancel Gravity (usually F):
+T
+# never use start level (usually F):
+F
+#use T ref (usually T):
+F
+#Check modes (usually F):
+F
+# use_remedy awkward modes (usually T):
+T
+# rescue  (try to do something if missing a mode ) (usually T):
+T
+# restart (to restart in case of crash during computation
+F
+#force_systemic_search
+F
+# keep_bad_modes
+T
+# modout_format (ipg, ucb, olm)
+ucb
+# seuil_ray
+0.0001
+# l_startlevel
+0
