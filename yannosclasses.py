@@ -6,12 +6,12 @@ def main():
     fname_model = 'data/PREMQL6'
     fname_bin   = 'data/PREMQL6.bin.mhz25.S'
     model = YannosModel(fname_model)
-    rho   = model.data['rho']
+    rhos   = model.data['rho']
 
     modes = YannosModeBinary(fname_bin)
     modes.info()
     #modes.plot_modes( np.logical_and(modes.modes['n']==0, modes.modes['l']==20) )
-    modes.test_normalization(rho)
+    modes.test_normalization(rhos)
 
 #==== ASCII FILE CLASS ====
 class YannosModeAscii:
@@ -170,12 +170,15 @@ class YannosModeBinary(object):
             ax.plot(radii,mode['U'])
         plt.show()
 
-    def test_normalization(self,rho):
+    def test_normalization(self,rhos):
+        #integrate over radius
         rhon = 5515.0
-        wn = 1.07519064529946291e-003
+        wn   = 1.07519064529946291e-003
         for mode in self.modes[self.modes['n']==0]:
-            norm = np.sum(rho/rhon*mode['U'])/len(self.radii)*(mode['w']/wn)**2
-            print(norm)
+            k2 = mode['l']*(mode['l']+1)
+            integrand = rhos/rhon*(mode['U']**2*self.radii**2 + mode['V']**2)
+            norm = np.trapz(integrand,x=self.radii)*(mode['w']/wn)**2
+            print('l={:d}, norm={:f}'.format(mode['l'],norm))
 
     def info(self):
         print('contains {:d} modes'.format(self.nmodes))
@@ -183,7 +186,7 @@ class YannosModeBinary(object):
         print('lowest frequency mode:')
         info = minmode['n'],minmode['l'],1e3*minmode['w']/2./np.pi
         print('{:d}S{:d} f={:2.2f}mHz'.format(*info))
-        maxmode = self.modes[np.argmin(self.modes['w'])]
+        maxmode = self.modes[np.argmax(self.modes['w'])]
         print('lowest frequency mode:')
         info = maxmode['n'],maxmode['l'],1e3*maxmode['w']/2./np.pi
         print('{:d}S{:d} f={:2.2f}mHz'.format(*info))
