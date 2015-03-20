@@ -172,24 +172,40 @@ class YannosModeBinary(object):
 
     def test_normalization(self,rhos):
         #integrate over radius
-        rhon = 5515.0
-        wn   = 1.07519064529946291e-003
-        for mode in self.modes[self.modes['n']==0]:
-            k2 = mode['l']*(mode['l']+1)
-            integrand = rhos/rhon*(mode['U']**2*self.radii**2 + mode['V']**2)
-            norm = np.trapz(integrand,x=self.radii)*(mode['w']/wn)**2
-            print('l={:d}, norm={:f}'.format(mode['l'],norm))
+        rhon  = 5515.0
+        wn    = 1.07519064529946291e-003
+        norms  = []
+        for imode,mode in enumerate(self.modes):
+            integrand = rhos/rhon*self.radii**2*(mode['U']**2 + mode['V']**2)*(mode['w']/wn)**2
+            norm = np.trapz(integrand,x=self.radii)
+            norms.append( (imode,norm) )
+        norms = np.array(norms)
+        bins = np.logspace(-4,0,10)
+        errors = np.abs(norms[:,1]-1.0)
+        hist,bins = np.histogram(errors,bins=bins)
+        print('distribution of norms (due to undersampling errors?):')
+        for ibin,nmodes in enumerate(hist):
+            mask   = np.logical_and(errors>bins[ibin],errors<bins[ibin+1])
+            avfreq = np.mean(self.modes['w'][mask])*1e3/2./np.pi
+            avl    = int(np.mean(self.modes['l'][mask]))
+            avn    = int(np.mean(self.modes['n'][mask]))
+            print('error {:2.5f}-{:2.5f} : {:d} modes,  avl: {:d}, avn: {:d}, avfreq: {:2.2f}mHz'.format(bins[ibin],bins[ibin+1],nmodes,avl,avn,avfreq))
+        print 'modes in last bin:'
+        for imode in norms[errors>bins[-2],0]:
+            mode = self.modes[imode]
+            info = mode['n'],mode['l'],1e3*mode['w']/2./np.pi
+            print('{:d} S {:d} f={:2.2f}mHz'.format(*info))
 
     def info(self):
         print('contains {:d} modes'.format(self.nmodes))
         minmode = self.modes[np.argmin(self.modes['w'])]
         print('lowest frequency mode:')
         info = minmode['n'],minmode['l'],1e3*minmode['w']/2./np.pi
-        print('{:d}S{:d} f={:2.2f}mHz'.format(*info))
+        print('{:d} S {:d} f={:2.2f}mHz'.format(*info))
         maxmode = self.modes[np.argmax(self.modes['w'])]
         print('lowest frequency mode:')
         info = maxmode['n'],maxmode['l'],1e3*maxmode['w']/2./np.pi
-        print('{:d}S{:d} f={:2.2f}mHz'.format(*info))
+        print('{:d} S {:d} f={:2.2f}mHz'.format(*info))
 
 #============ MODEL CLASS ===============
 class YannosModel(object):
@@ -253,35 +269,34 @@ class YannosModel(object):
         """
         plots all model data in one figure
         """
-        fig = plt.figure()            #this is the figure object, that can be used for more complex figures
+        fig = plt.figure()           
         fig.suptitle(self.name)
-        ax1 = fig.add_subplot(211)    #we define matlab style subplots. The number describes a grid of plots
-        ax1twin = ax1.twinx()         #number1: nrows, number2: ncolumns, number3: plot position
-        ax2 = fig.add_subplot(212)    #ax1 is the upper plot in our grid, ax2 is the lower plot
-        ax2twin = ax2.twinx()         #
+        ax1 = fig.add_subplot(211)   
+        ax1twin = ax1.twinx()       
+        ax2 = fig.add_subplot(212) 
+        ax2twin = ax2.twinx()     
     
-        radii = self.data['rad']        #this is the first column which is used as the global x axis
+        radii = self.data['rad']  
     
-        #we select now the indices that we wish to plot in each ax and pass them to the numpy array.
-        lines = ax1.plot(radii,self.data['rho'],'--',label='rho')
-        ax1.legend(lines,loc=2)
+        ax1.plot(radii,self.data['rho'],'--',label='rho')
+        ax1.legend(loc=2)
         ax1.set_xlabel(r'radius in m')
         ax1.set_ylabel(r'density in $kg/m^3$')
     
-        line4 = ax1twin.plot(radii,self.data['vpv'],label='vpv')
-        line3 = ax1twin.plot(radii,self.data['vsv'],label='vsv')
-        line2 = ax1twin.plot(radii,self.data['vph'],label='vph')
-        line1 = ax1twin.plot(radii,self.data['vsh'],label='vsh')
-        ax1twin.legend([line1,line2,line3,line4])
+        ax1twin.plot(radii,self.data['vpv'],label='vpv')
+        ax1twin.plot(radii,self.data['vsv'],label='vsv')
+        ax1twin.plot(radii,self.data['vph'],label='vph')
+        ax1twin.plot(radii,self.data['vsh'],label='vsh')
+        ax1twin.legend()
         ax1twin.set_ylabel(r'velocity in $m/s$')
     
-        lines = ax2.plot(radii,self.data['Qmu'],'--')
+        ax2.plot(radii,self.data['Qmu'],'--')
         ax2.legend(loc=2)
         ax2.set_xlabel(r'radius in m')
         ax2.set_ylabel(r'Attenuation factor Q')
     
-        lines = ax2twin.plot(radii,self.data['eta'])
-        ax2twin.legend(lines)
+        ax2twin.plot(radii,self.data['eta'])
+        ax2twin.legend()
         ax2twin.set_ylabel(r'anisotropy $\eta$')
         plt.show()
 
