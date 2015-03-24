@@ -13,7 +13,7 @@ def main():
     modes = YannosModeBinary(fname_bin)
     modes.info()
     #modes.test_normalization(rhos)
-    mask = np.logical_and(modes.modes['n']==0, modes.modes['l']==30)
+    mask = (modes.modes['n']==0) * ((modes.modes['l']==40) + (modes.modes['l']==150))
     modes.plot_modes(mask ,show=False)
     modes.plot_kernels(model,mask, show=True)
 
@@ -205,7 +205,7 @@ class YannosModeBinary(object):
 
     def get_kernels(self,model,mask):
         """computes vp/vs kernels according to Dahlen & Tromp Eq: 9.13 ff."""
-        print('NOT PROPERLY BENCHMARKED!, just approximately against a Deuss paper')
+        print('NOT PROPERLY BENCHMARKED!')
 
         #---- compute anisotropic love parameters and isotropic velocity ---
         rho  = model.data['rho']
@@ -225,7 +225,8 @@ class YannosModeBinary(object):
 
         vs_iso = np.sqrt(Mu_iso/rho)
         vp_iso = np.sqrt((Kappa_iso+4./3.*Mu_iso)/rho)
-
+ 
+        #---- loop through all selected modes and compute and store vp/vs kernels ----
         nselect  = np.count_nonzero(mask)
         nkernels = 2 #isotropic vp and vs kernels
         kernels = np.zeros( (nselect,nkernels,self.nradii) )
@@ -244,7 +245,8 @@ class YannosModeBinary(object):
             KMu    = 1/3*(2*r*dU-2*U+k*V)**2\
                     +(r*dV-V+k*U)**2+(k**2-2)*V**2
 
-            kernels[imode,0] = 2*rho*vp_iso**2/(2*w)*KKappa
+            #careful there is an extra factor vp_iso and vs_iso because we show relative kernels!
+            kernels[imode,0] = 2*rho*vp_iso**2/(2*w)*KKappa 
             kernels[imode,1] = 2*rho*vs_iso**2/(2*w)*(KMu-4/3*KKappa)
 
         return kernels
@@ -264,6 +266,9 @@ class YannosModeBinary(object):
             axes[1].legend()
 
         if show: plt.show()
+
+    def get_excitation():
+        pass
 
     def info(self):
         print('contains {:d} modes'.format(self.nmodes))
