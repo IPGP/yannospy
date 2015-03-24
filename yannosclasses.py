@@ -112,7 +112,6 @@ class YannosModeAscii:
 class YannosModeBinary(object):
     def __init__(self,fname):
         """This class reads yannos binary mode files. Works only for spherioidal modes so far"""
-
         #--- record 1: meta information ---
         binfile = open(fname,'rb')
         rstart = np.fromfile(binfile,count=1,dtype=np.int32)
@@ -162,10 +161,13 @@ class YannosModeBinary(object):
 
         self.modes  = np.array(modes,dtype=ModeRecord)
         self.nmodes = len(self.modes)
+        self.lmax   = np.max(self.modes['l'])
+        self.nmax   = np.max(self.modes['n'])
         print('found {:d} modes'.format(self.nmodes))
 
     def plot_modes(self,mask,show=True):
         """
+        plots normal mode eigenfunctions.
         mask: e.g. self.modes['n'] == 0
         """
         fig,ax = plt.subplots(1,1)
@@ -178,6 +180,7 @@ class YannosModeBinary(object):
         if show: plt.show()
 
     def test_normalization(self,rhos):
+        """test the normal mode normalization using a simple trapezoidal integration"""
         #integrate over radius
         rhon  = 5515.0
         wn    = 1.07519064529946291e-003
@@ -251,7 +254,46 @@ class YannosModeBinary(object):
 
         return kernels
 
+    def get_coefficients(self, depth, moment_tensor, mask):
+        """computes moment tensor excitation coefficients according to Dahlen & Tromp 10.35 ff"""
+        #compute excitation wavefield
+        Mrr = moment_tensor[0]
+        Mtt = moment_tensor[1]
+        Mpp = moment_tensor[2]
+        Mrt = moment_tensor[3]
+        Mrp = moment_tensor[4]
+        Mtp = moment_tensor[5]
+
+        r = 1.-depth/6371.
+        lmax = self.lmax
+        nmax = self.nmax
+        coeffs = np.zeros( (nmax+1,lmax+1,2,3) )
+
+        for mode in self.modes:
+            l = mode['l']
+            k = np.sqrt(l*(l+1))
+            n = mode['n']
+
+            #get eigenfunctions at source depth
+            U  = np.interp(r,self.radii,mode['U'])
+            dU = np.interp(r,self.radii,mode['dU'])
+            V  = np.interp(r,self.radii,mode['V'])
+            dV = np.interp(r,self.radii,mode['dV'])
+
+            #compute A coefficients
+            coeffs[n,l,0,0] = Mrr*dU+(Mtt+Mpp)*(U-0.5*k*V)/r
+            coeffs[n,l,0,1] = Mrt*(dV-V/r+k*U/r)/k
+            coeffs[n,l,0,2] = 0.5*(Mtt-Mpp)*V/(k*r)
+
+            #compute B coefficients
+            #coeffs[n,l,1,0] = 0.
+            coeffs[n,l,1,1] = Mrp*(dV-V/r+k*U/r)/k
+            coeffs[n,l,1,2] = Mtp*V/k
+
+        return coeffs
+
     def plot_kernels(self,model,mask,show=False):
+        """plots isotropic vs and vp kernels"""
         kernels = self.get_kernels(model,mask)
         fig,axes = plt.subplots(1,2)
 
@@ -267,10 +309,8 @@ class YannosModeBinary(object):
 
         if show: plt.show()
 
-    def get_excitation():
-        pass
-
     def info(self):
+        """prints some informations about the mode catalogue"""
         print('contains {:d} modes'.format(self.nmodes))
         minmode = self.modes[np.argmin(self.modes['w'])]
         print('lowest frequency mode:')
