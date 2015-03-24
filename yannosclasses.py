@@ -2,8 +2,12 @@
 
 from __future__ import division
 from __future__ import print_function
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
+
+sys.path.append('/home/matthias/projects/gitprojects/SHTOOLS_dev/SHTOOLS')
+from pyshtools import SHExpandDH
 
 def main():
     fname_model = 'data/PREMQL6'
@@ -274,7 +278,8 @@ class YannosModeBinary(object):
             k = np.sqrt(l*(l+1))
             n = mode['n']
 
-            #get eigenfunctions at source depth
+            #get eigenfunctions at source depth 
+            #'map_coordinates' function should be faster!
             U  = np.interp(r,self.radii,mode['U'])
             dU = np.interp(r,self.radii,mode['dU'])
             V  = np.interp(r,self.radii,mode['V'])
@@ -291,6 +296,27 @@ class YannosModeBinary(object):
             coeffs[n,l,1,2] = Mtp*V/k
 
         return coeffs
+
+    def get_slice(self, time, depth, Sdepth, moment_tensor, mask):
+        excoeffs = self.get_coefficients(depth, moment_tensor, mask)
+        #I. add all overtones
+        coeffs = np.zeros( (2,self.lmax+1,self.lmax+1) )
+        r = 1.-depth/6371.
+
+        for mode in self.modes[mask]:
+            U  = np.interp(r,self.radii,mode['U'])
+            n = mode['n']
+            l = mode['l']
+            omega = mode['w']
+            coeffs[:,l,:] += U*excoeffs[n,l]*(1.-np.cos(omega*time))/omega
+        grid = SHExpandDH(coeffs)
+        return grid
+
+    def plot_wavefield(self,depth,Sdepth,moment_tensor,mask):
+        grid = self.get_slice(depth,Sdepth,moment_tensor,mask)
+        plt.figure()
+        plt.imshow(grid)
+        plt.show()
 
     def plot_kernels(self,model,mask,show=False):
         """plots isotropic vs and vp kernels"""
