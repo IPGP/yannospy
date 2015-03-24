@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+
+from __future__ import division
+from __future__ import print_function
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -6,12 +9,13 @@ def main():
     fname_model = 'data/PREMQL6'
     fname_bin   = 'data/PREMQL6.bin.mhz25.S'
     model = YannosModel(fname_model)
-    rhos   = model.data['rho']
 
     modes = YannosModeBinary(fname_bin)
     modes.info()
-    #modes.plot_modes( np.logical_and(modes.modes['n']==0, modes.modes['l']==20) )
-    modes.test_normalization(rhos)
+    #modes.test_normalization(rhos)
+    mask = np.logical_and(modes.modes['n']==0, modes.modes['l']==30)
+    modes.plot_modes(mask ,show=False)
+    modes.plot_kernels(model,mask, show=True)
 
 #==== ASCII FILE CLASS ====
 class YannosModeAscii:
@@ -160,15 +164,18 @@ class YannosModeBinary(object):
         self.nmodes = len(self.modes)
         print('found {:d} modes'.format(self.nmodes))
 
-    def plot_modes(self,mask):
+    def plot_modes(self,mask,show=True):
         """
         mask: e.g. self.modes['n'] == 0
         """
         fig,ax = plt.subplots(1,1)
         radii = np.linspace(0.,6371.,self.nradii)
         for mode in self.modes[mask]:
-            ax.plot(radii,mode['U'])
-        plt.show()
+            ax.plot(radii,mode['U'],label=r'$U_{{ {:d},{:d} }}$'.format(mode['n'],mode['l']))
+            #ax.plot(radii,mode['dU'])
+            ax.plot(radii,mode['V'],label=r'$V_{{ {:d},{:d} }}$'.format(mode['n'],mode['l']))
+        ax.legend()
+        if show: plt.show()
 
     def test_normalization(self,rhos):
         #integrate over radius
@@ -190,11 +197,73 @@ class YannosModeBinary(object):
             avl    = int(np.mean(self.modes['l'][mask]))
             avn    = int(np.mean(self.modes['n'][mask]))
             print('error {:2.5f}-{:2.5f} : {:d} modes,  avl: {:d}, avn: {:d}, avfreq: {:2.2f}mHz'.format(bins[ibin],bins[ibin+1],nmodes,avl,avn,avfreq))
-        print 'modes in last bin:'
+        print('modes in last bin:')
         for imode in norms[errors>bins[-2],0]:
             mode = self.modes[imode]
             info = mode['n'],mode['l'],1e3*mode['w']/2./np.pi
             print('{:d} S {:d} f={:2.2f}mHz'.format(*info))
+
+    def get_kernels(self,model,mask):
+        """computes vp/vs kernels according to Dahlen & Tromp Eq: 9.13 ff."""
+        print('NOT PROPERLY BENCHMARKED!, just approximately against a Deuss paper')
+
+        #---- compute anisotropic love parameters and isotropic velocity ---
+        rho  = model.data['rho']
+        vpv  = model.data['vpv']
+        vsv  = model.data['vsv']
+        vph  = model.data['vph']
+        vsh  = model.data['vsh']
+        eta  = model.data['eta']
+
+        A = vph**2*rho
+        C = vpv**2*rho
+        N = vsh**2*rho
+        L = vsv**2*rho
+        F = eta*(A-2*L)
+        Kappa_iso = 1./9.*(4.*A + C + 4.*F - 4.*N)
+        Mu_iso    = 1./15.*(A+C-2.*F+5.*N + 6.*L)
+
+        vs_iso = np.sqrt(Mu_iso/rho)
+        vp_iso = np.sqrt((Kappa_iso+4./3.*Mu_iso)/rho)
+
+        nselect  = np.count_nonzero(mask)
+        nkernels = 2 #isotropic vp and vs kernels
+        kernels = np.zeros( (nselect,nkernels,self.nradii) )
+
+        for imode,mode in enumerate(self.modes[mask]):
+            l  = mode['l']
+            w  = mode['w']
+            r  = self.radii
+            k  = np.sqrt(l*(l+1))
+            U  = mode['U']
+            dU = mode['dU']
+            V  = mode['V']
+            dV = mode['dV']
+
+            KKappa = (r*dU+2*U-k*V)**2
+            KMu    = 1/3*(2*r*dU-2*U+k*V)**2\
+                    +(r*dV-V+k*U)**2+(k**2-2)*V**2
+
+            kernels[imode,0] = 2*rho*vp_iso**2/(2*w)*KKappa
+            kernels[imode,1] = 2*rho*vs_iso**2/(2*w)*(KMu-4/3*KKappa)
+
+        return kernels
+
+    def plot_kernels(self,model,mask,show=False):
+        kernels = self.get_kernels(model,mask)
+        fig,axes = plt.subplots(1,2)
+
+        for kernel,mode in zip(kernels,self.modes[mask]):
+            disc = np.array([670.,2880.])
+            axes[0].plot(self.radii*6371.,kernel[0],label=r'Kvp$_{{ {:d},{:d} }}$'.format(mode['n'],mode['l']))
+            axes[0].vlines(6371.-disc,0.,kernel[0].max())
+            axes[0].legend()
+
+            axes[1].plot(self.radii*6371.,kernel[1],label=r'Kvs$_{{ {:d},{:d} }}$'.format(mode['n'],mode['l']))
+            axes[1].vlines(6371.-disc,0.,kernel[1].max())
+            axes[1].legend()
+
+        if show: plt.show()
 
     def info(self):
         print('contains {:d} modes'.format(self.nmodes))
@@ -249,8 +318,8 @@ class YannosModel(object):
     #--------------------
     def info(self):
         """prints model info"""
-        print 'model name: ',self.name
-        print 'total number of layers: ',self.nlayers[0]
+        print('model name: ',self.name)
+        print('total number of layers: ',self.nlayers[0])
 
     #--------------------
     def plot(self, variable = 'vpv'):
