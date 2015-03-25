@@ -5,9 +5,10 @@ from __future__ import print_function
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import ipdb
 
 sys.path.append('/home/matthias/projects/gitprojects/SHTOOLS_dev/SHTOOLS')
-from pyshtools import SHExpandDH
+from pyshtools import MakeGridDH
 
 def main():
     fname_model = 'data/PREMQL6'
@@ -115,7 +116,10 @@ class YannosModeAscii:
 #========== MODE BINARY FILE ===============
 class YannosModeBinary(object):
     def __init__(self,fname):
-        """This class reads yannos binary mode files. Works only for spherioidal modes so far"""
+        """
+        This class reads yannos binary mode files (ucb format). 
+        Works only for spherioidal modes so far
+        """
         #--- record 1: meta information ---
         binfile = open(fname,'rb')
         rstart = np.fromfile(binfile,count=1,dtype=np.int32)
@@ -236,13 +240,13 @@ class YannosModeBinary(object):
         #---- loop through all selected modes and compute and store vp/vs kernels ----
         nselect  = np.count_nonzero(mask)
         nkernels = 2 #isotropic vp and vs kernels
-        kernels = np.zeros( (nselect,nkernels,self.nradii) )
+        kernels  = np.zeros( (nselect,nkernels,self.nradii) )
 
+        r  = self.radii
         for imode,mode in enumerate(self.modes[mask]):
             l  = mode['l']
-            w  = mode['w']
-            r  = self.radii
             k  = np.sqrt(l*(l+1))
+            w  = mode['w']
             U  = mode['U']
             dU = mode['dU']
             V  = mode['V']
@@ -258,7 +262,7 @@ class YannosModeBinary(object):
 
         return kernels
 
-    def get_coefficients(self, depth, moment_tensor, mask):
+    def get_coefficients(self, depth, moment_tensor, mask=None):
         """computes moment tensor excitation coefficients according to Dahlen & Tromp 10.35 ff"""
         #compute excitation wavefield
         Mrr = moment_tensor[0]
@@ -286,34 +290,38 @@ class YannosModeBinary(object):
             dV = np.interp(r,self.radii,mode['dV'])
 
             #compute A coefficients
-            coeffs[n,l,0,0] = Mrr*dU+(Mtt+Mpp)*(U-0.5*k*V)/r
-            coeffs[n,l,0,1] = Mrt*(dV-V/r+k*U/r)/k
-            coeffs[n,l,0,2] = 0.5*(Mtt-Mpp)*V/(k*r)
+            if k==0:
+                coeffs[n,l,0,0] = Mrr*dU+(Mtt+Mpp)*(U-0.5*k*V)/r
+            else:
+                coeffs[n,l,0,0] = Mrr*dU+(Mtt+Mpp)*(U-0.5*k*V)/r
+                coeffs[n,l,0,1] = Mrt*(dV-V/r+k*U/r)/k
+                coeffs[n,l,0,2] = 0.5*(Mtt-Mpp)*V/(k*r)
 
-            #compute B coefficients
-            #coeffs[n,l,1,0] = 0.
-            coeffs[n,l,1,1] = Mrp*(dV-V/r+k*U/r)/k
-            coeffs[n,l,1,2] = Mtp*V/k
+                #compute B coefficients
+                #coeffs[n,l,1,0] = 0.
+                coeffs[n,l,1,1] = Mrp*(dV-V/r+k*U/r)/k
+                coeffs[n,l,1,2] = Mtp*V/k
 
         return coeffs
 
-    def get_slice(self, time, depth, Sdepth, moment_tensor, mask):
+    def get_layer(self, time, depth, Sdepth, moment_tensor, mask=None):
+        """gets excitation coefficients and computes wavefield"""
+        print('CAREFUL, BUGGY!!')
         excoeffs = self.get_coefficients(depth, moment_tensor, mask)
-        #I. add all overtones
         coeffs = np.zeros( (2,self.lmax+1,self.lmax+1) )
         r = 1.-depth/6371.
-
-        for mode in self.modes[mask]:
+        for mode in self.modes:
             U  = np.interp(r,self.radii,mode['U'])
             n = mode['n']
             l = mode['l']
             omega = mode['w']
-            coeffs[:,l,:] += U*excoeffs[n,l]*(1.-np.cos(omega*time))/omega
-        grid = SHExpandDH(coeffs)
+            coeffs[:,l,:3] += U*excoeffs[n,l]*(1.-np.cos(omega*time))
+        grid = MakeGridDH(coeffs)
         return grid
 
-    def plot_wavefield(self,depth,Sdepth,moment_tensor,mask):
-        grid = self.get_slice(depth,Sdepth,moment_tensor,mask)
+    def plot_wavefield(self,depth,Sdepth,moment_tensor,mask=None):
+        """plots wavefield to screen"""
+        grid = self.get_layer(depth,Sdepth,moment_tensor,mask)
         plt.figure()
         plt.imshow(grid)
         plt.show()
@@ -443,145 +451,3 @@ class YannosModel(object):
 #==== EXECUTE SCRIPT ====
 if __name__ == "__main__":
     main()
-
-#========= A SIMPLE MODE CLASS ============
-#class Mode:
-#    def __init__(self,i,nbcou_lay,modetype,radii,n,l,w,q,gv,buf):
-#        self.index = i
-#        self.modetype = modetype
-#        self.radii = radii
-#        self.n = n
-#        self.l = l
-#        self.omega = w
-#        self.q = q
-#        self.gv= gv
-#        #data arrays
-#        self.u = buf[0*nbcou_lay:1*nbcou_lay]
-#        self.du = buf[1*nbcou_lay:2*nbcou_lay]
-#        self.v = 0.0
-#        self.dv = 0.0
-#        self.p = 0.0
-#        self.dp = 0.0
-#        self.w = 0.0
-#        self.dw = 0.0
-#        if modetype == 'spheroidal':
-#            self.v = buf[2*nbcou_lay:3*nbcou_lay]
-#            self.dv = buf[3*nbcou_lay:4*nbcou_lay]
-#            self.p = buf[4*nbcou_lay:5*nbcou_lay]
-#            self.dp = buf[5*nbcou_lay:6*nbcou_lay]
-#
-#    def pt(self):
-#        print 'Mode No. %1d: %1dS%1d f=%2.2e'%(self.index,self.n,self.l,self.omega/2./np.pi)
-#
-#    def get_kernels(self,rho,vph,vpv,vsh,vsv,eta):
-#        """computes vp/vs kernels according to Dahlen & Tromp Eq: 9.13 ff."""
-#        print "CAREFUL, DIDN'T WORK IN THE BENCHMARKS"
-#        import matplotlib.pyplot as plt
-#        #get the anisotropic love parameters
-#        A = vph**2*rho
-#        C = vpv**2*rho
-#        N = vsh**2*rho
-#        L = vsv**2*rho
-#        F = eta*(A-2*L)
-#        Kappa_iso = 1./9.*(4.*A + C + 4.*F - 4.*N)
-#        Mu_iso    = 1./15.*(A+C-2.*F+5.*N + 6.*L)
-#        vs_iso = np.sqrt(Mu_iso/rho)
-#        vp_iso = np.sqrt((Kappa_iso+4./3.*Mu_iso)/rho)
-#        ir = 210
-#        r = self.radii
-#
-#        print 'stats for radius:'
-#        print r[ir]*6371.
-#        print 'rho,vph,vpv,vsh,vsv'
-#        print rho[ir],vph[ir],vpv[ir],vsh[ir],vsv[ir]
-#        print 'eta,A,C,N,L,F'
-#        print eta[ir],A[ir],C[ir],N[ir],L[ir],F[ir]
-#        
-#        l = self.l
-#        k = l*(l+1)
-#        u = self.u
-#        du = self.du
-#        v = self.v/np.sqrt(k)
-#        dv = self.dv/np.sqrt(k)
-#
-#        #test normalization:
-#        print 'frequency w is: ',self.omega
-#
-#        rhon = 5515.
-#        wn = 1.07519064529946291e-003
-#
-#        print (self.omega/wn)**2*np.sum(rho/rhon*(u**2+k*v**2)*r**2)/len(rho)
-#
-#        #Dziewonski, PREM paper, check!
-#        K_C = (r*du)**2
-#        K_A = (2.*u-k*v)**2
-#        K_F = 2.*r*du*(2*u-k*v)
-#        K_L = k*r*(r*dv + u - v)**2
-#        K_N = (l+2)*k*(l-1) * v**2 - K_A
-#        Kbar = K_A + K_C + K_F
-#        Mbar = K_L + K_N - 2./3. * Kbar
-#        plt.figure()
-#        plt.plot(r,K_A,label='A')
-#        plt.plot(r,K_C,label='C')
-#        plt.plot(r,K_F,label='F')
-#        plt.plot(r,K_L,label='L')
-#        plt.plot(r,K_N,label='N')
-#        plt.plot(r,Kbar,label='Kbar')
-#        plt.legend()
-#
-#        #iso Tromp&Dahlen
-##        v = self.v
-##        dv = self.dv
-##        kd = np.sqrt(k)
-##        K_kappa = (r*du + 2.*u - kd*v)**2
-##
-##        K_mu    = 1./3.*(2.*r*du - 2.*u + kd*v)**2 + \
-##                  (r*dv - v + kd*u)**2 + (kd**2 - 2.)*v**2
-##        K_alpha = -rho*vp_iso * K_kappa
-##        K_beta  = -rho*vs_iso * (K_mu - 4./3.*K_kappa)
-#        #iso Dziewonski
-#        K_alpha = -rho*vp_iso*Kbar
-#        K_beta  = -rho*vs_iso*(K_L + K_N -2.*K_F) #the equation using Mbar does not work, because
-#                                                  #it also includes the A and C kernels...
-#
-#        Pv = -rho*vpv*K_C
-#        Ph = -rho*vph*(K_A+eta*K_F)
-#        Sv = -rho*vsv*(K_L-2.*eta*K_F)
-#        Sh = -rho*vsh*K_N
-#        plt.figure()
-#        rearth=6371.
-#        plt.plot(rearth-r*rearth,Pv,label='Pv')
-#        plt.plot(rearth-r*rearth,Ph,label='Ph')
-#        plt.plot(rearth-r*rearth,K_alpha,label='P')
-#        plt.legend()
-#        plt.xlim(0.,500.)
-#        plt.figure()
-#        rearth=6371.
-#        plt.plot(rearth-r*rearth,Sv,label='Sv')
-#        plt.plot(rearth-r*rearth,Sh,label='Sh')
-#        plt.plot(rearth-r*rearth,K_beta,label='S')
-#        plt.legend()
-#        plt.xlim(0.,500.)
-#        plt.show()
-#
-#        #Dahlen & Tromp:
-#        kd = np.sqrt(k)
-#        dv = self.dv
-#        v = self.v
-#        K_DC = (r*du)**2
-#        K_DA = (2.*u-kd*v)**2
-#        K_DF = 2.*r*du*(2*u-kd*v)
-#        K_DL = (r*dv - v + kd*u)**2
-#        K_DN = -(2.*u - kd*v)**2 + (kd**2 - 2.)*v**2
-#
-#        #---- isotropic formulation ----
-##        K_kappa = (r*du + 2.*u - kd*v)**2
-##
-##        K_mu    = 1./3.*(2.*r*du - 2.*u + kd*v)**2 + \
-##                  (r*dv - v + kd*u)**2 + (kd**2 - 2.)*v**2
-##        plt.plot(K_kappa,'o',label='K_kappa')
-##        plt.plot(K_mu,'o',label='K_mu')
-##
-##        K_alpha = 2.*rho*vpv * K_kappa
-##        K_beta  = 2.*rho*vsv * (K_mu - 4./3.*K_kappa)
-#        return K_alpha, K_beta
