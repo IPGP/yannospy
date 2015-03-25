@@ -11,6 +11,7 @@ def main():
 
     moment_tensor = [1.,1.,1.,0.5,-0.5,0.]
 
+    modes.plot_swradiation(40.,moment_tensor,0,100,show=False)
     modes.plot_wavefield(2000.,40.,40.,moment_tensor)
 
 if __name__ == "__main__":
